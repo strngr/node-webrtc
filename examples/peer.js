@@ -1,67 +1,56 @@
 /* eslint no-console:0 */
 'use strict';
 
-var test = require('tape');
+const { test } = require('tape');
 
-test('Bridge Example', function(t) {
-  var host = window.location.host.split(':')[0];
-  var bridge = window.location.toString().split('?')[1] || host + ':8080';
+test('Bridge Example', t => {
+  const host = window.location.host.split(':')[0];
+  const bridge = window.location.toString().split('?')[1] || host + ':8080';
 
-  var dataChannelSettings = {
+  const dataChannelSettings = {
     'reliable': {
       ordered: false,
       maxRetransmits: 10
     },
-    /*
-  'reliable': {},
-  '@control': {
-        outOfOrderAllowed: true,
-        maxRetransmitNum: 0
-      }
-      */
   };
 
-  var pendingDataChannels = {};
-  var dataChannels = {};
-  var pendingCandidates = [];
+  const pendingDataChannels = {};
+  const dataChannels = {};
+  const pendingCandidates = [];
 
-  function doHandleError(error)
-  {
+  function doHandleError(error) {
     throw error;
   }
 
-  function doComplete()
-  {
+  function doComplete() {
     console.log('complete');
-    var data = new Uint8Array([97, 99, 107, 0]);
+    const data = new Uint8Array([97, 99, 107, 0]);
     dataChannels.reliable.send(data.buffer);
     dataChannels.reliable.send('Hello bridge!');
     t.pass('it worked');
     t.end();
   }
 
-  function doWaitforDataChannels()
-  {
+  function doWaitforDataChannels() {
     console.log('awaiting data channels');
   }
 
-  var ws = null;
-  var pc = new RTCPeerConnection({
-    iceServers: [{ url: 'stun:stun.l.google.com:19302' }]
-  }, {
-    optional: []
-  });
-  pc.onsignalingstatechange = function(event) {
-    console.info('signaling state change: ', event.target.signalingState);
+  let ws;
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+  pc.onsignalingstatechange = () => {
+    console.info('signaling state change: ', pc.signalingState);
   };
-  pc.oniceconnectionstatechange = function(event) {
-    console.info('ice connection state change: ', event.target.iceConnectionState);
+
+  pc.oniceconnectionstatechange = () => {
+    console.info('ice connection state change: ', pc.iceConnectionState);
   };
-  pc.onicegatheringstatechange = function(event) {
-    console.info('ice gathering state change: ', event.target.iceGatheringState);
+
+  pc.onicegatheringstatechange = () => {
+    console.info('ice gathering state change: ', pc.iceGatheringState);
   };
-  pc.onicecandidate = function(event) {
-    var candidate = event.candidate;
+
+  pc.onicecandidate = ({ candidate }) => {
     if (!candidate) return;
     if (WebSocket.OPEN === ws.readyState) {
       ws.send(JSON.stringify({
@@ -80,11 +69,14 @@ test('Bridge Example', function(t) {
   doCreateDataChannels();
 
   function doCreateDataChannels() {
-    var labels = Object.keys(dataChannelSettings);
-    labels.forEach(function(label) {
-      var channelOptions = dataChannelSettings[label];
-      var channel = pendingDataChannels[label] = pc.createDataChannel(label, channelOptions);
+    const labels = Object.keys(dataChannelSettings);
+
+    labels.forEach(label => {
+      const channelOptions = dataChannelSettings[label];
+      const channel = pendingDataChannels[label] = pc.createDataChannel(label, channelOptions);
+
       channel.binaryType = 'arraybuffer';
+
       channel.onopen = function() {
         console.info('onopen');
         dataChannels[label] = channel;
@@ -93,19 +85,22 @@ test('Bridge Example', function(t) {
           doComplete();
         }
       };
-      channel.onmessage = function(event) {
-        var data = event.data;
-        if ('string' === typeof data) {
+
+      channel.onmessage = ({ data }) => {
+        if (typeof data === 'string') {
           console.log('onmessage:', data);
         } else {
           console.log('onmessage:', new Uint8Array(data));
         }
       };
+
       channel.onclose = function() {
         console.info('onclose');
       };
+
       channel.onerror = doHandleError;
     });
+
     doCreateOffer();
   }
 
@@ -124,34 +119,33 @@ test('Bridge Example', function(t) {
     );
   }
 
-  function doSendOffer(offer)
-  {
+  function doSendOffer(offer) {
     ws = new WebSocket('ws://' + bridge);
-    ws.onopen = function()
-    {
-      pendingCandidates.forEach(function(candidate)
-        {
-          ws.send(JSON.stringify({
-            type: 'ice',
-            sdp: {
-              candidate: candidate.candidate,
-              sdpMid: candidate.sdpMid,
-              sdpMLineIndex: candidate.sdpMLineIndex
-            }
-          }));
-        });
+    ws.onopen = () => {
+      pendingCandidates.forEach(candidate => {
+        ws.send(JSON.stringify({
+          type: 'ice',
+          sdp: {
+            candidate: candidate.candidate,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex
+          }
+        }));
+      });
+
       ws.send(JSON.stringify({
         type: offer.type,
         sdp: offer.sdp
       }));
     };
-    ws.onmessage = function(event) {
-      var data = JSON.parse(event.data);
-      if ('answer' === data.type) {
+
+    ws.onmessage = ({ data }) => {
+      data = JSON.parse(data);
+      if (data.type === 'answer') {
         doSetRemoteDesc(data);
-      } else if ('ice' === data.type) {
+      } else if (data.type === 'ice') {
         if (data.sdp.candidate) {
-          var candidate = new RTCIceCandidate(data.sdp.candidate);
+          const candidate = new RTCIceCandidate(data.sdp);
           pc.addIceCandidate(candidate, handleAddIceCandidateSuccess, handleAddIceCandidateError);
         }
       }

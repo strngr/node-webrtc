@@ -2,20 +2,20 @@
 /* eslint no-console:0, no-process-env:0, no-process-exit:0 */
 'use strict';
 
-var fork = require('child_process').fork;
-var spawn = require('child_process').spawn;
-var join = require('path').join;
+const { fork } = require('child_process');
+const { spawn } = require('child_process');
+const { join } = require('path');
 
 console.log('Starting server');
-var server = fork(join(__dirname, '..', 'examples', 'bridge.js'));
+let server = fork(join(__dirname, '..', 'examples', 'bridge.js'));
 console.log('Server PID is ' + server.pid);
 
-server.once('error', function(error) {
+server.once('error', error => {
   console.error('Failed to start server: ' + error.stack);
   exit(error.code);
 });
 
-server.once('exit', function(code) {
+server.once('exit', code => {
   if (code) {
     console.error('Server closed in error');
     exit(code);
@@ -23,7 +23,7 @@ server.once('exit', function(code) {
 });
 
 console.log('Starting Karma');
-var karma = spawn(join(__dirname, '..', 'node_modules', '.bin', 'karma'), ['start'], {
+let karma = spawn(join(__dirname, '..', 'node_modules', '.bin', 'karma'), ['start'], {
   env: Object.assign({
     FILE: join(__dirname, '..', 'examples', 'peer.js'),
   }, process.env),
@@ -32,12 +32,12 @@ var karma = spawn(join(__dirname, '..', 'node_modules', '.bin', 'karma'), ['star
 });
 console.log('Karma PID is ' + karma.pid);
 
-karma.once('error', function(error) {
+karma.once('error', error => {
   console.error('Failed to start Karma: ' + error.stack);
   exit(1);
 });
 
-karma.once('exit', function(code) {
+karma.once('exit', code => {
   if (code) {
     console.error('Karma closed in error');
     exit(code);

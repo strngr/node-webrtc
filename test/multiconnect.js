@@ -1,113 +1,76 @@
-/* eslint no-console:0 */
 'use strict';
 
-var tape = require('tape');
-var SimplePeer = require('simple-peer');
-var wrtc = require('..');
+const SimplePeer = require('simple-peer');
+const { test } = require('tap');
 
-tape('connect once', function(t) {
-  t.plan(1);
-  console.log('###########################\n');
-  connect(function(err) {
-    t.error(err, 'connect callback');
-  });
+const wrtc = require('..');
+
+test('connect once', async () => {
+  await connect();
 });
 
-tape('connect loop', function(t) {
-  t.plan(1);
-  console.log('###########################\n');
-  connectLoop(10, function(err) {
-    t.error(err, 'connect callback');
-  });
+test('connect loop', async () => {
+  await connectLoop(10);
 });
 
-tape('connect concurrent', function(t) {
-  var n = 10;
-  t.plan(n);
-  console.log('###########################\n');
-  for (var i = 0; i < n; i += 1) {
-    connect(callback);
+test('connect concurrent', async () => {
+  const n = 10;
+  const connectPromises = [];
+  for (let i = 0; i < n; i++) {
+    connectPromises.push(connect());
   }
-
-  function callback(err) {
-    t.error(err, 'connect callback');
-  }
+  await Promise.all(connectPromises);
 });
 
-tape('connect loop concurrent', function(t) {
-  var n = 10;
-  t.plan(n);
-  console.log('###########################\n');
-  for (var i = 0; i < n; i += 1) {
-    connectLoop(10, callback);
+test('connect loop concurrent', async () => {
+  const n = 10;
+  const connectPromises = [];
+  for (let i = 0; i < n; i++) {
+    connectPromises.push(connectLoop(10));
   }
-
-  function callback(err) {
-    t.error(err, 'connect callback');
-  }
+  await Promise.all(connectPromises);
 });
 
-var connIdGen = 1;
-
-function connect(callback) {
-  var connId = connIdGen;
-  var connName = 'CONNECTION-' + connId;
-  connIdGen += 1;
-  console.log(connName, 'starting');
-
+async function connect() {
   // setup two peers with simple-peer
-  var peer1 = new SimplePeer({
-    wrtc: wrtc
-  });
-  var peer2 = new SimplePeer({
-    wrtc: wrtc,
-    initiator: true
-  });
+  const peer1 = new SimplePeer({ wrtc });
+  const peer2 = new SimplePeer({ wrtc, initiator: true });
 
   // when peer1 has signaling data, give it to peer2, and vice versa
-  peer1.on('signal', function(data) {
-    console.log(connName, 'signal peer1 -> peer2:');
-    console.log(' ', data);
-    peer2.signal(data);
-  });
-  peer2.on('signal', function(data) {
-    console.log(connName, 'signal peer2 -> peer1:');
-    console.log(' ', data);
-    peer1.signal(data);
+  const peer1Promise = new Promise((resolve, reject) => {
+    peer1.on('signal', data => {
+      peer2.signal(data);
+    });
+
+    peer1.on('error', reject);
+
+    peer1.on('connect', () => {
+      peer1.send('peers are for kids');
+      resolve();
+    });
   });
 
-  peer1.on('error', function(err) {
-    console.log(connName, 'peer1 error', err);
-    callback(err);
-  });
-  peer2.on('error', function(err) {
-    console.log(connName, 'peer2 error', err);
-    callback(err);
+  const peer2Promise = new Promise((resolve, reject) => {
+    peer2.on('signal', data => {
+      peer1.signal(data);
+    });
+
+    peer2.on('error', reject);
+
+    peer2.on('data', () => resolve());
   });
 
-  // wait for 'connect' event
-  peer1.on('connect', function() {
-    console.log(connName, 'sending message');
-    peer1.send('peers are for kids');
-  });
-  peer2.on('data', function() {
-    console.log(connName, 'completed');
-    callback();
-  });
+  await Promise.all([
+    peer1Promise,
+    peer2Promise
+  ]);
+
+  peer1.destroy();
+  peer2.destroy();
 }
 
-function connectLoop(count, callback) {
-  if (count <= 0) {
-    console.log('connect loop completed');
-    callback();
-  } else {
-    console.log('connect loop remain', count);
-    connect(function(err) {
-      if (err) {
-        callback(err);
-      } else {
-        connectLoop(count - 1, callback);
-      }
-    });
+async function connectLoop(count) {
+  for (let i = 0; i < count; i++) {
+    await connect();
   }
 }

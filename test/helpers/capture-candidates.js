@@ -1,17 +1,20 @@
 'use strict';
 
 function captureCandidates(pc) {
-  var candidates = [];
-  return new Promise(function(resolve) {
-    pc.onicecandidate = function(evt) {
-      if (evt.candidate) {
-        // eslint-disable-next-line no-console
-        console.log(evt);
-        candidates.push(evt.candidate);
-      } else {
-        resolve(candidates);
+  return new Promise(resolve => {
+    const candidates = [];
+    if (pc.iceGatheringState === 'complete') {
+      resolve(candidates);
+      return;
+    }
+    pc.addEventListener('icecandidate', function onIceCandidate({ candidate }) {
+      if (candidate) {
+        candidates.push(candidate);
+        return;
       }
-    };
+      pc.removeEventListener('icecandidate', onIceCandidate);
+      resolve(candidates);
+    });
   });
 }
 

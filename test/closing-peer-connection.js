@@ -1,49 +1,29 @@
 'use strict';
 
-var test = require('tape');
-var wrtc = require('..');
+const { test } = require('tap');
 
-var RTCPeerConnection = wrtc.RTCPeerConnection;
+const { createPeerConnections, delay, negotiate, onOpen } = require('./helpers');
 
-test('make sure channel is available after after connection is closed on the other side', function(t) {
-  t.plan(2);
+test('make sure channel is available after after connection is closed on the other side', async t => {
+  const [pc1, pc2] = createPeerConnections();
 
-  var peer1 = new RTCPeerConnection({ iceServers: [] });
-  var peer2 = new RTCPeerConnection({ iceServers: [] });
-  var channel1 = peer1.createDataChannel('data', { negotiated: true, id: 0 });
-  var channel2 = peer2.createDataChannel('data2', { negotiated: true, id: 0 });
-  var waitingFor = 2;
+  const dc1 = pc1.createDataChannel('data', { negotiated: true, id: 0 });
+  const dc2 = pc2.createDataChannel('data2', { negotiated: true, id: 0 });
 
-  function ready() {
-    --waitingFor;
-    if (!waitingFor) {
-      channel2.close();
-      t.equal(channel2.readyState, 'closed', 'can still check ready state after closing');
-      peer2.close();
-      setTimeout(function() {
-        channel1.send('Hello');
-        channel1.close();
-        peer1.close();
-        t.equal(channel1.readyState, 'closed', 'channel on the other side is also closed, but we did not crash');
-      }, 100);
-    }
-  }
+  await negotiate(pc1, pc2);
 
-  channel1.onopen = ready;
-  channel2.onopen = ready;
+  await Promise.all([
+    onOpen(dc1),
+    onOpen(dc2)
+  ]);
 
-  peer1.createOffer()
-    .then(function(offer) {
-      return peer1.setLocalDescription(offer);
-    })
-    .then(function() {
-      peer2.setRemoteDescription(peer1.localDescription);
-      return peer2.createAnswer();
-    })
-    .then(function(answer) {
-      return peer2.setLocalDescription(answer);
-    })
-    .then(function() {
-      peer1.setRemoteDescription(peer2.localDescription);
-    });
+  dc2.close();
+  t.equal(dc2.readyState, 'closed', 'can still check ready state after closing');
+
+  pc2.close();
+  await delay(100);
+  dc1.send('Hello');
+  dc1.close();
+  pc1.close();
+  t.equal(dc1.readyState, 'closed', 'channel on the other side is also closed, but we did not crash');
 });

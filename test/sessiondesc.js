@@ -1,57 +1,38 @@
 'use strict';
 
-var test = require('tape');
+const { test } = require('tap');
 
-var wrtc = require('..');
+const { RTCPeerConnection, RTCSessionDescription } = require('..');
 
-var RTCPeerConnection = wrtc.RTCPeerConnection;
-var RTCSessionDescription = wrtc.RTCSessionDescription;
+let peer;
+let localDesc;
 
-var peer;
-var localDesc;
-
-test('create a peer connection', function(t) {
-  t.plan(1);
-  peer = new RTCPeerConnection({ iceServers: [] });
+test('create a peer connection', t => {
+  peer = new RTCPeerConnection();
   t.ok(peer instanceof RTCPeerConnection, 'created');
+  t.end();
 });
 
-test('createOffer', function(t) {
+test('createOffer', async t => {
+  const offer = await peer.createOffer();
 
-  var fail = t.ifError.bind(t);
+  // save the local description
+  localDesc = offer;
 
-  function pass(desc) {
-    // save the local description
-    localDesc = desc;
-
-    // run the checks
-    t.ok(desc, 'createOffer succeeded');
-    t.equal(desc.type, 'offer', 'type === offer');
-    t.ok(desc.sdp, 'got sdp');
-  }
-
-  t.plan(3);
-  peer.createOffer(pass, fail);
+  // run the checks
+  t.ok(offer, 'createOffer succeeded');
+  t.equal(offer.type, 'offer', 'type === offer');
+  t.ok(offer.sdp, 'got sdp');
 });
 
-test('setLocalDescription with a created RTCSessionDescription', function(t) {
-  var fail = t.ifError.bind(t);
-
-  function pass() {
-    t.ok(peer.localDescription, 'local description set');
-    t.ok(peer.localDescription.sdp, 'we have local sdp');
-  }
-
-  t.plan(2);
-  peer.setLocalDescription(
-    new RTCSessionDescription({ sdp: localDesc.sdp, type: 'offer' }),
-    pass,
-    fail
-  );
+test('setLocalDescription with a created RTCSessionDescription', async t => {
+  await peer.setLocalDescription(new RTCSessionDescription({ sdp: localDesc.sdp, type: 'offer' }));
+  t.ok(peer.localDescription, 'local description set');
+  t.ok(peer.localDescription.sdp, 'we have local sdp');
 });
 
-test('TODO: cleanup connection', function(t) {
-  t.plan(1);
+test('TODO: cleanup connection', t => {
   peer.close();
   t.pass('connection closed');
+  t.end();
 });

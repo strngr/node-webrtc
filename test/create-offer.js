@@ -1,62 +1,48 @@
 'use strict';
 
-var test = require('tape');
+const { test } = require('tap');
 
-var RTCPeerConnection = require('..').RTCPeerConnection;
+const { RTCPeerConnection } = require('..');
 
+let peer;
+let localDesc;
 
-var peer;
-var localDesc;
-
-
-test('create a peer connection', function(t) {
-  t.plan(1);
+test('create a peer connection', t => {
   peer = new RTCPeerConnection({ iceServers: [] });
   t.ok(peer instanceof RTCPeerConnection, 'created');
+  t.end();
 });
 
-test('createOffer function implemented', function(t) {
-  t.plan(1);
+test('createOffer function implemented', t => {
   t.equal(typeof peer.createOffer, 'function', 'implemented');
+  t.end();
 });
 
-test('can call createOffer', function(t) {
+test('can call createOffer', async t => {
+  const offer = await peer.createOffer();
 
-  var fail = t.ifError.bind(t);
+  // save the local description
+  localDesc = offer;
 
-  function pass(desc) {
-    // save the local description
-    localDesc = desc;
-
-    // run the checks
-    t.ok(desc, 'createOffer succeeded');
-    t.equal(desc.type, 'offer', 'type === offer');
-    t.ok(desc.sdp, 'got sdp');
-  }
-
-  t.plan(3);
-  peer.createOffer(pass, fail);
+  // run the checks
+  t.ok(offer, 'createOffer succeeded');
+  t.equal(offer.type, 'offer', 'type === offer');
+  t.ok(offer.sdp, 'got sdp');
 });
 
-test('setLocalDescription function implemented', function(t) {
-  t.plan(1);
+test('setLocalDescription function implemented', t => {
   t.equal(typeof peer.setLocalDescription, 'function', 'implemented');
+  t.end();
 });
 
-test('can call setLocalDescription', function(t) {
-  var fail = t.ifError.bind(t);
-
-  function pass() {
-    t.ok(peer.localDescription, 'local description set');
-    t.ok(peer.localDescription.sdp, 'we have local sdp');
-  }
-
-  t.plan(2);
-  peer.setLocalDescription(localDesc, pass, fail);
+test('can call setLocalDescription', async t => {
+  await peer.setLocalDescription(localDesc);
+  t.ok(peer.localDescription, 'local description set');
+  t.ok(peer.localDescription.sdp, 'we have local sdp');
 });
 
-test('TODO: cleanup connection', function(t) {
-  t.plan(1);
+test('TODO: cleanup connection', t => {
   peer.close();
   t.pass('connection closed');
+  t.end();
 });
