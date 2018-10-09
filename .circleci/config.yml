@@ -1,0 +1,161 @@
+version: 2
+
+aliases:
+  node: &node
+    working_directory: ~/node-webrtc
+
+    docker:
+      - image: buildpack-deps:trusty
+
+    steps:
+      - run:
+          name: Install Node
+          command: |
+            cd ~
+            curl -sL https://deb.nodesource.com/setup_$NODE_VERSION.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+
+      - run:
+          name: npm version
+          command: npm version
+
+      - run:
+          name: Install Build Tools
+          command: sudo apt-get install -y build-essential
+
+      - run:
+          name: Install CMake
+          command: |
+            cd ~
+            wget https://cmake.org/files/v3.12/cmake-3.12.3-Linux-x86_64.sh
+            chmod +x cmake-3.12.3-Linux-x86_64.sh
+            sudo ./cmake-3.12.3-Linux-x86_64.sh --skip-license
+            sudo ln -s $(pwd)/bin/* /usr/local/bin
+            rm cmake-3.12.3-Linux-x86_64.sh
+
+      - run:
+          name: Setup /etc/hosts for Web Platform Tests
+          command: |
+            echo >>/etc/hosts 127.0.0.1	web-platform.test
+            echo >>/etc/hosts 127.0.0.1	www.web-platform.test
+            echo >>/etc/hosts 127.0.0.1	xn--n8j6ds53lwwkrqhv28a.web-platform.test
+            echo >>/etc/hosts 127.0.0.1	xn--lve-6lad.web-platform.test
+            echo >>/etc/hosts 127.0.0.1	www2.web-platform.test
+            echo >>/etc/hosts 127.0.0.1	www1.web-platform.test
+            echo >>/etc/hosts 0.0.0.0	nonexistent-origin.web-platform.test
+
+      - checkout
+
+      - run:
+          name: npm install
+          command: SKIP_DOWNLOAD=true DEBUG=true npm install --unsafe-perm
+
+      - run:
+          name: Lint JavaScript
+          command: npm run lint
+
+      - run:
+          name: Lint C++
+          command: |
+            cd build
+            make check
+            make format
+            cd ..
+            if [[ -n $(git diff) ]]; then
+              echo "You must run make format before submitting a pull request"
+              echo ""
+              git diff
+              exit -1
+            fi
+
+      - run:
+          name: Run Unit and Integration Tests
+          command: npm test
+
+      - run:
+          name: Run Web Platform Tests
+          command: npm run wpt:test
+
+      - run:
+          name: Install Chrome and Firefox
+          command: |
+            sudo apt-get install -y \
+              gconf-service \
+              libasound2 \
+              libatk1.0-0 \
+              libatk-bridge2.0-0 \
+              libc6 \
+              libcairo2 \
+              libcups2 \
+              libdbus-1-3 \
+              libexpat1 \
+              libfontconfig1 \
+              libgcc1 \
+              libgconf-2-4 \
+              libgdk-pixbuf2.0-0 \
+              libglib2.0-0 \
+              libgtk-3-0 \
+              libnspr4 \
+              libpango-1.0-0 \
+              libpangocairo-1.0-0 \
+              libstdc++6 \
+              libx11-6 \
+              libx11-xcb1 \
+              libxcb1 \
+              libxcomposite1 \
+              libxcursor1 \
+              libxdamage1 \
+              libxext6 \
+              libxfixes3 \
+              libxi6 \
+              libxrandr2 \
+              libxrender1 \
+              libxss1 \
+              libxtst6 \
+              ca-certificates \
+              fonts-liberation \
+              libappindicator1 \
+              libnss3 \
+              lsb-release \
+              xdg-utils \
+              wget
+            cd node_modules/travis-multirunner
+            export BVER=stable
+            BROWSER=chrome ./setup.sh
+            BROWSER=firefox ./setup.sh
+            echo >> $BASH_ENV export CHROME_BIN=$(pwd)/browsers/bin/chrome-$BVER
+            echo >> $BASH_ENV export FIREFOX_BIN=$(pwd)/browsers/bin/firefox-$BVER
+
+      - run:
+          name: Run Bridge Test
+          command: npm run test:bridge
+
+jobs:
+  node-10:
+    <<: *node
+    environment:
+      NODE_VERSION: 10
+
+  node-9:
+    <<: *node
+    environment:
+      NODE_VERSION: 9
+
+  node-8:
+    <<: *node
+    environment:
+      NODE_VERSION: 8
+
+  node-6:
+    <<: *node
+    environment:
+      NODE_VERSION: 6
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - node-10
+      - node-9
+      - node-8
+      - node-6
