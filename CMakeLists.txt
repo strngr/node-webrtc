@@ -3,9 +3,26 @@ cmake_minimum_required(VERSION 3.6)
 include(ExternalProject)
 find_package(Git REQUIRED)
 
-if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/webrtc)
+# libwebrtc
+# -----------------------------------------------------------------------------
+
+ExternalProject_Add(
+  project_libwebrtc
+  GIT_REPOSITORY https://github.com/aisouard/libwebrtc.git
+  GIT_TAG 730b7fd55f0cd255b177d3c20045fe021474a636
+  CMAKE_ARGS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} -DGN_EXTRA_ARGS:STRING=is_clang=false\ use_custom_libcxx=false\ use_sysroot=false\ treat_warnings_as_errors=false
+  INSTALL_COMMAND ""
+)
+
+ExternalProject_Get_Property(project_libwebrtc BINARY_DIR)
+set(libwebrtc_install_dir "${BINARY_DIR}")
+
+add_library(libwebrtc STATIC IMPORTED)
+add_dependencies(libwebrtc project_libwebrtc)
+if(WIN32)
+  set_property(TARGET libwebrtc PROPERTY IMPORTED_IMPLIB "${libwebrtc_install_dir}/lib/libwebrtc.lib")
 else()
-  execute_process(COMMAND node ${CMAKE_SOURCE_DIR}/scripts/download-webrtc-libraries-and-headers.js)
+  set_property(TARGET libwebrtc PROPERTY IMPORTED_LOCATION "${libwebrtc_install_dir}/lib/libwebrtc.a")
 endif()
 
 set(MODULE wrtc)
@@ -29,7 +46,7 @@ target_include_directories(${MODULE} PRIVATE ${CMAKE_SOURCE_DIR})
 
 find_package(Threads)
 target_include_directories(${MODULE} SYSTEM PRIVATE
-  ${CMAKE_SOURCE_DIR}/third_party/webrtc/include)
+  ${libwebrtc_install_dir}/include)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GR-")
@@ -37,7 +54,6 @@ if(WIN32)
 
   target_link_libraries(${MODULE} PRIVATE
     ${CMAKE_THREAD_LIBS_INIT}
-    ${CMAKE_SOURCE_DIR}/third_party/webrtc/lib/webrtc.lib
     dmoguids.lib
     msdmo.lib
     secur32.lib
@@ -55,7 +71,7 @@ else()
 
   target_link_libraries(${MODULE} PRIVATE
     ${CMAKE_THREAD_LIBS_INIT}
-    ${CMAKE_SOURCE_DIR}/third_party/webrtc/lib/libwebrtc.a)
+    libwebrtc)
 
   target_compile_options(${MODULE} PUBLIC
     # -Werror
