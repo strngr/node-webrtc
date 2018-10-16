@@ -3,26 +3,97 @@ cmake_minimum_required(VERSION 3.6)
 include(ExternalProject)
 find_package(Git REQUIRED)
 
-# libwebrtc
+# depot_tools
 # -----------------------------------------------------------------------------
 
 ExternalProject_Add(
-  project_libwebrtc
-  GIT_REPOSITORY https://github.com/aisouard/libwebrtc.git
-  GIT_TAG 730b7fd55f0cd255b177d3c20045fe021474a636
-  CMAKE_ARGS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} -DGN_EXTRA_ARGS:STRING=is_clang=false\ use_custom_libcxx=false\ use_sysroot=false\ treat_warnings_as_errors=false
-  INSTALL_COMMAND ""
+  project_depot_tools
+
+  GIT_REPOSITORY    https://chromium.googlesource.com/chromium/tools/depot_tools.git
+  GIT_TAG           2fddb95698211db1373ebe2b16091a54eac51c9c
+
+  PREFIX            ${CMAKE_BINARY_DIR}/external/depot_tools/prefix
+  TMP_DIR           ${CMAKE_BINARY_DIR}/external/depot_tools/tmp
+  STAMP_DIR         ${CMAKE_BINARY_DIR}/external/depot_tools/stamp
+  DOWNLOAD_DIR      ${CMAKE_BINARY_DIR}/external/depot_tools/download
+  SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/depot_tools/src
+  BINARY_DIR        ${CMAKE_BINARY_DIR}/external/depot_tools/build
+
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND     ""
+  INSTALL_COMMAND   ""
 )
 
+ExternalProject_Get_Property(project_depot_tools SOURCE_DIR)
+set(depot_tools_install_dir ${SOURCE_DIR})
+
+add_executable(cipd IMPORTED)
+set_property(TARGET cipd PROPERTY IMPORTED_LOCATION ${depot_tools_install_dir}/cipd)
+add_dependencies(cipd project_depot_tools)
+
+add_executable(fetch IMPORTED)
+set_property(TARGET fetch PROPERTY IMPORTED_LOCATION ${depot_tools_install_dir}/fetch)
+add_dependencies(fetch project_depot_tools)
+
+add_executable(gclient IMPORTED)
+set_property(TARGET gclient PROPERTY IMPORTED_LOCATION ${depot_tools_install_dir}/gclient)
+add_dependencies(gclient project_depot_tools)
+
+add_executable(gn IMPORTED)
+set_property(TARGET gn PROPERTY IMPORTED_LOCATION ${depot_tools_install_dir}/gn)
+add_dependencies(gn project_depot_tools)
+
+add_executable(ninja IMPORTED)
+set_property(TARGET ninja PROPERTY IMPORTED_LOCATION ${depot_tools_install_dir}/ninja)
+add_dependencies(ninja project_depot_tools)
+
+# libwebrtc
+# -----------------------------------------------------------------------------
+
+set(gn_gen_args use_sysroot=false)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  list(APPEND gn_gen_args is_debug=true)
+else()
+  list(APPEND gn_gen_args is_debug=false)
+endif()
+
+set(WEBRTC_REVISION d34a1886495b63c79c2ce08cf00be40eef554ebf)
+
+ExternalProject_Add(
+  project_libwebrtc
+
+  PREFIX            ${CMAKE_BINARY_DIR}/external/libwebrtc/prefix
+  TMP_DIR           ${CMAKE_BINARY_DIR}/external/libwebrtc/tmp
+  STAMP_DIR         ${CMAKE_BINARY_DIR}/external/libwebrtc/stamp
+  DOWNLOAD_DIR      ${CMAKE_BINARY_DIR}/external/libwebrtc/download
+  SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/download/src
+  BINARY_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/build/${CMAKE_BUILD_TYPE}
+
+  DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env PATH=${depot_tools_install_dir}:$ENV{PATH} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.sh
+  PATCH_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/scripts/patch-webrtc.sh
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> GN_GEN_ARGS=${GN_GEN_ARGS} PATH=${depot_tools_install_dir}:$ENV{PATH} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.sh
+  BUILD_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} PATH=${depot_tools_install_dir}:$ENV{PATH} ${CMAKE_SOURCE_DIR}/scripts/build-webrtc.sh
+  INSTALL_COMMAND   ""
+)
+
+# add_dependencies(project_libwebrtc cipd)
+add_dependencies(project_libwebrtc fetch)
+# add_dependencies(project_libwebrtc gclient)
+# add_dependencies(project_libwebrtc gn)
+# add_dependencies(project_libwebrtc ninja)
+
+ExternalProject_Get_Property(project_libwebrtc DOWNLOAD_DIR)
+set(libwebrtc_source_dir "${DOWNLOAD_DIR}")
+
 ExternalProject_Get_Property(project_libwebrtc BINARY_DIR)
-set(libwebrtc_install_dir "${BINARY_DIR}")
+set(libwebrtc_binary_dir "${BINARY_DIR}")
 
 add_library(libwebrtc STATIC IMPORTED)
 add_dependencies(libwebrtc project_libwebrtc)
 if(WIN32)
-  set_property(TARGET libwebrtc PROPERTY IMPORTED_IMPLIB "${libwebrtc_install_dir}/lib/libwebrtc.lib")
+  set_property(TARGET libwebrtc PROPERTY IMPORTED_IMPLIB "${libwebrtc_binary_dir}/obj/libwebrtc.lib")
 else()
-  set_property(TARGET libwebrtc PROPERTY IMPORTED_LOCATION "${libwebrtc_install_dir}/lib/libwebrtc.a")
+  set_property(TARGET libwebrtc PROPERTY IMPORTED_LOCATION "${libwebrtc_binary_dir}/obj/libwebrtc.a")
 endif()
 
 set(MODULE wrtc)
@@ -33,9 +104,6 @@ file(GLOB_RECURSE MODULE_SRC src/*.cc src/*.h)
 add_nodejs_module(${MODULE} ${MODULE_SRC})
 
 file(GLOB_RECURSE MODULE_SRC_WITHOUT_WEBRTC src/*.cc src/*.h)
-list(REMOVE_ITEM MODULE_SRC_WITHOUT_WEBRTC
-  ${CMAKE_SOURCE_DIR}/src/webrtc/physicalsocketserver.h
-  ${CMAKE_SOURCE_DIR}/src/webrtc/physicalsocketserver.cc)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_definitions(${MODULE} PRIVATE -DDEBUG)
@@ -45,8 +113,11 @@ endif()
 target_include_directories(${MODULE} PRIVATE ${CMAKE_SOURCE_DIR})
 
 find_package(Threads)
+
 target_include_directories(${MODULE} SYSTEM PRIVATE
-  ${libwebrtc_install_dir}/include)
+  ${libwebrtc_source_dir}
+  ${libwebrtc_source_dir}/webrtc
+  ${libwebrtc_source_dir}/webrtc/third_party/abseil-cpp)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /GR-")
@@ -109,7 +180,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     astyle
     GIT_REPOSITORY      https://github.com/Bareflank/astyle.git
     GIT_TAG             v1.2
-    GIT_SHALLOW         1
+    GIT_SHALLOW         true
     CMAKE_ARGS          ${ASTYLE_CMAKE_ARGS}
     PREFIX              ${CMAKE_BINARY_DIR}/external/astyle/prefix
     TMP_DIR             ${CMAKE_BINARY_DIR}/external/astyle/tmp
@@ -161,7 +232,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     cppcheck
     GIT_REPOSITORY      https://github.com/danmar/cppcheck.git
     GIT_TAG             1.83
-    GIT_SHALLOW         1
+    GIT_SHALLOW         true
     CMAKE_ARGS          ${CPPCHECK_CMAKE_ARGS}
     PREFIX              ${CMAKE_BINARY_DIR}/external/cppcheck/prefix
     TMP_DIR             ${CMAKE_BINARY_DIR}/external/cppcheck/tmp
