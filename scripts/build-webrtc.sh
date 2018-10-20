@@ -4,4 +4,8 @@ set -e
 
 set -v
 
-ninja
+if [ -z "$PARALLELISM" ]; then
+  ninja
+else
+  ninja -j $PARALLELISM
+fi

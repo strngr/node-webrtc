@@ -24,6 +24,22 @@ aliases:
           command: sudo apt-get install -y build-essential
 
       - run:
+          name: Install gcc-5 and g++-5
+          command: |
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            sudo apt-get update
+            sudo apt-get install -y binutils-2.26 gcc-5 g++-5
+            sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld-2.26 1
+            sudo update-alternatives --install /usr/bin/ld.bfd ld.bfd /usr/bin/ld.bfd-2.26 1 --force
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 1
+            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 1
+
+      - run:
+          name: Install Dependencies
+          command: sudo apt-get install -y gtk+-3.0 libasound2-dev libgl1-mesa-dev libpulse-dev libxtst-dev mesa-common-dev
+
+      - run:
           name: Install CMake
           command: |
             cd ~
@@ -48,7 +64,7 @@ aliases:
 
       - run:
           name: npm install
-          command: SKIP_DOWNLOAD=true DEBUG=true npm install --unsafe-perm
+          command: PARALLELISM=3 TAR_OPTIONS=--no-same-owner SKIP_DOWNLOAD=true DEBUG=true npm install --unsafe-perm
 
       - run:
           name: Lint JavaScript

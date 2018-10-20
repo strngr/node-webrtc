@@ -50,12 +50,21 @@ add_dependencies(ninja project_depot_tools)
 # libwebrtc
 # -----------------------------------------------------------------------------
 
-set(gn_gen_args use_sysroot=false)
+set(GN_GEN_ARGS use_sysroot=false)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  list(APPEND gn_gen_args is_debug=true)
+  list(APPEND GN_GEN_ARGS is_debug=true)
 else()
-  list(APPEND gn_gen_args is_debug=false)
+  list(APPEND GN_GEN_ARGS is_debug=false)
 endif()
+
+if (APPLE)
+  set(nohooks false)
+elseif(UNIX)
+  set(nohooks true)
+  list(APPEND GN_GEN_ARGS is_clang=false use_custom_libcxx=false use_gold=false use_sysroot=false treat_warnings_as_errors=false)
+endif()
+
+string (REPLACE ";" " " GN_GEN_ARGS_STR "${GN_GEN_ARGS}")
 
 set(WEBRTC_REVISION d34a1886495b63c79c2ce08cf00be40eef554ebf)
 
@@ -69,9 +78,9 @@ ExternalProject_Add(
   SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/download/src
   BINARY_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/build/${CMAKE_BUILD_TYPE}
 
-  DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env PATH=${depot_tools_install_dir}:$ENV{PATH} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.sh
+  DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env NOHOOKS=${nohooks} PATH=${depot_tools_install_dir}:$ENV{PATH} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.sh
   PATCH_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/scripts/patch-webrtc.sh
-  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> GN_GEN_ARGS=${GN_GEN_ARGS} PATH=${depot_tools_install_dir}:$ENV{PATH} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.sh
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> GN_GEN_ARGS=${GN_GEN_ARGS_STR} PATH=${depot_tools_install_dir}:$ENV{PATH} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.sh
   BUILD_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} PATH=${depot_tools_install_dir}:$ENV{PATH} ${CMAKE_SOURCE_DIR}/scripts/build-webrtc.sh
   INSTALL_COMMAND   ""
 )
@@ -167,9 +176,11 @@ if(APPLE)
 elseif(UNIX)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
   target_compile_definitions(${MODULE} PRIVATE
-    -D_GLIBCXX_USE_CXX11_ABI=0
     -DWEBRTC_LINUX
     -DWEBRTC_POSIX=1)
+  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_DEBUG=1")
+  endif()
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
