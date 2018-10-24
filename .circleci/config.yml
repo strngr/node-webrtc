@@ -64,7 +64,7 @@ aliases:
 
       - run:
           name: npm install
-          command: PARALLELISM=3 TAR_OPTIONS=--no-same-owner SKIP_DOWNLOAD=true DEBUG=true npm install --unsafe-perm
+          command: PARALLELISM=2 TAR_OPTIONS=--no-same-owner SKIP_DOWNLOAD=true DEBUG=true npm install --unsafe-perm
 
       - run:
           name: Lint JavaScript
@@ -172,6 +172,5 @@ workflows:
   build:
     jobs:
       - node-10
-      - node-9
       - node-8
       - node-6
