@@ -12,4 +12,6 @@ else
   gclient sync --shallow --no-history -r ${WEBRTC_REVISION} -R
 fi
 
+rm -f webrtc
+
 ln -s src webrtc
